@@ -2,6 +2,7 @@
 
 import { withBasePath } from "@/lib/basePath";
 import { useScrollProgress } from "@/lib/scroll-context";
+import { navbarScroll } from "@/lib/theme/tokens";
 import { motion, useTransform } from "framer-motion";
 import Link from "next/link";
 
@@ -10,12 +11,12 @@ export function Navbar() {
   const backgroundColor = useTransform(
     scrollYProgress,
     [0, 0.14],
-    ["rgba(14, 14, 14, 0)", "rgba(14, 14, 14, 0.78)"]
+    [...navbarScroll.backgroundFromTo]
   );
   const borderBottomColor = useTransform(
     scrollYProgress,
     [0, 0.22],
-    ["rgba(200, 169, 126, 0)", "rgba(200, 169, 126, 0.18)"]
+    [...navbarScroll.borderFromTo]
   );
 
   return (

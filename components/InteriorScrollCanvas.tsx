@@ -1,7 +1,10 @@
 "use client";
 
 import { useScrollProgress } from "@/lib/scroll-context";
+import { drawCover } from "@/lib/canvas/draw-cover";
+import { buildFrameUrl, progressToFileNumber } from "@/lib/interior/sequence";
 import { SITE } from "@/lib/siteConfig";
+import { canvasBackground } from "@/lib/theme/tokens";
 import { useReducedMotion, useMotionValueEvent } from "framer-motion";
 import {
   useCallback,
@@ -14,35 +17,6 @@ import {
 const { totalFrames, sequencePath, sequenceExt, frameOrder } = SITE;
 
 const SEQUENCE_LEN = frameOrder.length;
-
-function framePath(fileNumber: number) {
-  return `${sequencePath}/${fileNumber}.${sequenceExt}`;
-}
-
-/** Maps scroll progress 0…1 to on-disk frame number using `frameOrder`. */
-function progressToFileNumber(p: number): number {
-  const clamped = Math.min(1, Math.max(0, p));
-  const idx = Math.round(clamped * (SEQUENCE_LEN - 1));
-  return frameOrder[idx]!;
-}
-
-/** object-fit: cover in canvas coordinates */
-function drawCover(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  cw: number,
-  ch: number
-) {
-  const iw = img.naturalWidth;
-  const ih = img.naturalHeight;
-  if (!iw || !ih) return;
-  const scale = Math.max(cw / iw, ch / ih);
-  const dw = iw * scale;
-  const dh = ih * scale;
-  const dx = (cw - dw) / 2;
-  const dy = (ch - dh) / 2;
-  ctx.drawImage(img, dx, dy, dw, dh);
-}
 
 export function InteriorScrollCanvas() {
   const scrollYProgress = useScrollProgress();
@@ -86,7 +60,7 @@ export function InteriorScrollCanvas() {
         loadingRef.current.delete(frame);
         resolve(null);
       };
-      img.src = framePath(frame);
+      img.src = buildFrameUrl(frame, sequencePath, sequenceExt);
     });
   }, []);
 
@@ -141,7 +115,7 @@ export function InteriorScrollCanvas() {
       canvas.style.width = `${w}px`;
       canvas.style.height = `${h}px`;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.fillStyle = "#0e0e0e";
+      ctx.fillStyle = canvasBackground;
       ctx.fillRect(0, 0, bw, bh);
 
       const img = imagesRef.current.get(frame);
@@ -157,7 +131,7 @@ export function InteriorScrollCanvas() {
 
   const scheduleDraw = useCallback(
     (progress: number) => {
-      const frame = progressToFileNumber(progress);
+      const frame = progressToFileNumber(progress, frameOrder);
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = null;
