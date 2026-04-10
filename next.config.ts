@@ -5,6 +5,8 @@ const basePath =
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  output: "export",
+  images: { unoptimized: true },
   ...(basePath != null && basePath !== "" ? { basePath } : {}),
 };
 
