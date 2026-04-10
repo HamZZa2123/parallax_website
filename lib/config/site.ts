@@ -6,16 +6,16 @@ export const SITE = {
   totalFrames: 7,
   /**
    * Scroll sırası (dosya numaraları). Son iki öğe `mergeLastFramesInOneScroll: 2` ile birlikte iner.
-   * 6, 5’ten önce (4→6) gelir; son bantta 5 ve 7 aynı anda hareket eder (5 alttan, 7 üstten).
+   * 6, 5’ten önce (4→6) gelir; son bantta 5 ve 7 birlikte alttan kayar.
    */
   frameOrder: [1, 2, 3, 4, 6, 5, 7] as const,
   /**
    * Son N kareyi tek scroll diliminde birleştirir (N≥2). 0 = her komşu çift ayrı dilim.
-   * N=2 + yukarıdaki sıra → 5 ve 7 aynı bantta; 7 üstten, 5 `slideIncomingFromBottom` ile alttan.
+   * N=2 + yukarıdaki sıra → 5 ve 7 aynı bantta; ikisi de `slideIncomingFromBottom` ile alttan.
    */
   mergeLastFramesInOneScroll: 2,
   /** Bu dosya numaraları gelirken alttan kayar (diğerleri son iki kare kuralında üstten). */
-  slideIncomingFromBottom: [5] as const,
+  slideIncomingFromBottom: [5, 7] as const,
   /** Bu dosya numaraları gelirken soldan kayar (yatay; diğer kurallarla birleşmez). */
   slideIncomingFromLeft: [3] as const,
   /** Sticky-scroll height — higher when more frames so each blend has room. */

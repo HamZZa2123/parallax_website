@@ -41,7 +41,7 @@ const BLEND_OPTS: ProgressToBlendOptions | undefined =
     : undefined;
 
 const SEQUENCE_LEN = frameOrder.length;
-/** Son iki dosya varsayılan üstten; `slideIncomingFromBottom` ile istisna. */
+/** Son iki karede varsayılan üstten; `slideIncomingFromBottom` ile alttan. */
 const PENULTIMATE_FRAME = frameOrder[SEQUENCE_LEN - 2]!;
 const LAST_FRAME = frameOrder[SEQUENCE_LEN - 1]!;
 
