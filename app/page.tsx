@@ -1,6 +1,5 @@
 "use client";
 
-import { InteriorExperience } from "@/components/InteriorExperience";
 import { InteriorScrollCanvas } from "@/components/InteriorScrollCanvas";
 import { Navbar } from "@/components/Navbar";
 import { AboutSection } from "@/components/sections/AboutSection";
@@ -21,15 +20,14 @@ export default function Home() {
   return (
     <ScrollProgressProvider value={scrollYProgress}>
       <Navbar />
-      <main className="relative min-h-screen bg-base text-warm-light">
+      <main className="relative min-h-screen bg-base pt-[var(--nav-h)] text-warm-light">
         <div
           ref={scrollSectionRef}
           className="relative"
           style={{ height: `${SITE.scrollLengthVh}vh` }}
         >
-          <div className="sticky top-0 h-[100dvh] w-full overflow-hidden">
+          <div className="sticky top-[var(--nav-h)] h-[calc(100dvh-var(--nav-h))] min-h-[70dvh] w-full overflow-hidden">
             <InteriorScrollCanvas />
-            <InteriorExperience />
           </div>
         </div>
 

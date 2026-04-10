@@ -1,5 +1,5 @@
 Place numbered frames here:
-  1.png, 2.png, … N.png   (or .jpg / .webp — set `sequenceExt` and `totalFrames` in lib/siteConfig.ts)
+  1.png, 2.png, … N.png   (or .jpg / .webp — set `sequenceExt`, `totalFrames`, and `frameOrder` in lib/config/site.ts)
 
 Next.js serves this folder as: /images/interior-sequence/<n>.<ext>
 

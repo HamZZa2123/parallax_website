@@ -2,7 +2,14 @@
 
 import { useScrollProgress } from "@/lib/scroll-context";
 import { drawCover } from "@/lib/canvas/draw-cover";
-import { buildFrameUrl, progressToFileNumber } from "@/lib/interior/sequence";
+import {
+  buildFrameUrl,
+  heroBlendEase,
+  progressToBlend,
+  type ProgressToBlendOptions,
+  scrollProgressToScene,
+  tryParallelTailDraw,
+} from "@/lib/interior/sequence";
 import { SITE } from "@/lib/siteConfig";
 import { canvasBackground } from "@/lib/theme/tokens";
 import { useReducedMotion, useMotionValueEvent } from "framer-motion";
@@ -14,9 +21,35 @@ import {
   type ChangeEvent,
 } from "react";
 
-const { totalFrames, sequencePath, sequenceExt, frameOrder } = SITE;
+const {
+  totalFrames,
+  sequencePath,
+  sequenceExt,
+  frameOrder,
+  sequenceCompleteAt,
+  mergeLastFramesInOneScroll,
+  slideIncomingFromBottom,
+  slideIncomingFromLeft,
+} = SITE;
+
+const SLIDE_INCOMING_FROM_BOTTOM = new Set<number>(slideIncomingFromBottom);
+const SLIDE_INCOMING_FROM_LEFT = new Set<number>(slideIncomingFromLeft);
+
+const BLEND_OPTS: ProgressToBlendOptions | undefined =
+  mergeLastFramesInOneScroll >= 2
+    ? { mergeLastFrames: mergeLastFramesInOneScroll }
+    : undefined;
 
 const SEQUENCE_LEN = frameOrder.length;
+/** Son iki dosya varsayılan üstten; `slideIncomingFromBottom` ile istisna. */
+const PENULTIMATE_FRAME = frameOrder[SEQUENCE_LEN - 2]!;
+const LAST_FRAME = frameOrder[SEQUENCE_LEN - 1]!;
+
+/** Soldan giriş: ease-out ile bitişe doğru yavaşlar (lineer t’ye göre daha yumuşak). */
+function easeSlideFromLeft(t: number): number {
+  const x = Math.min(1, Math.max(0, t));
+  return 1 - (1 - x) ** 2.6;
+}
 
 export function InteriorScrollCanvas() {
   const scrollYProgress = useScrollProgress();
@@ -94,8 +127,8 @@ export function InteriorScrollCanvas() {
     };
   }, [ensureImage]);
 
-  const drawFrame = useCallback(
-    (frame: number) => {
+  const drawProgress = useCallback(
+    (sceneProgress: number) => {
       const canvas = canvasRef.current;
       const wrap = containerRef.current;
       if (!canvas || !wrap) return;
@@ -118,27 +151,95 @@ export function InteriorScrollCanvas() {
       ctx.fillStyle = canvasBackground;
       ctx.fillRect(0, 0, bw, bh);
 
-      const img = imagesRef.current.get(frame);
-      if (img?.complete && img.naturalWidth > 0) {
-        ctx.save();
-        ctx.scale(dpr, dpr);
-        drawCover(ctx, img, w, h);
+      const blendP = heroBlendEase(sceneProgress);
+      const parallel =
+        mergeLastFramesInOneScroll >= 2
+          ? tryParallelTailDraw(blendP, frameOrder, mergeLastFramesInOneScroll)
+          : { parallel: false as const };
+
+      ctx.save();
+      ctx.scale(dpr, dpr);
+
+      if (parallel.parallel) {
+        const { u, stackLastIdx } = parallel;
+        for (let idx = 0; idx <= stackLastIdx; idx++) {
+          const fn = frameOrder[idx]!;
+          const img = imagesRef.current.get(fn);
+          if (img?.complete && img.naturalWidth > 0) {
+            drawCover(ctx, img, w, h, "bottom");
+          }
+        }
+        const slideFromTopY = -(1 - u) * h;
+        const slideFromBottomY = (1 - u) * h;
+        const slideFromIdx = SEQUENCE_LEN - mergeLastFramesInOneScroll;
+        for (let k = slideFromIdx; k < SEQUENCE_LEN; k++) {
+          const fn = frameOrder[k]!;
+          const img = imagesRef.current.get(fn);
+          if (!img?.complete || img.naturalWidth <= 0) continue;
+          ctx.save();
+          ctx.translate(
+            0,
+            SLIDE_INCOMING_FROM_BOTTOM.has(fn) ? slideFromBottomY : slideFromTopY
+          );
+          drawCover(ctx, img, w, h, "bottom");
+          ctx.restore();
+        }
         ctx.restore();
+        return;
       }
+
+      const { a, b, t, fromIndex } = progressToBlend(blendP, frameOrder, BLEND_OPTS);
+      for (let idx = 0; idx <= fromIndex; idx++) {
+        const fn = frameOrder[idx]!;
+        const img = imagesRef.current.get(fn);
+        if (img?.complete && img.naturalWidth > 0) {
+          drawCover(ctx, img, w, h, "bottom");
+        }
+      }
+      if (a !== b) {
+        const imgB = imagesRef.current.get(b);
+        if (imgB?.complete && imgB.naturalWidth > 0) {
+          ctx.save();
+          if (SLIDE_INCOMING_FROM_LEFT.has(b)) {
+            const p = easeSlideFromLeft(t);
+            ctx.translate(-(1 - p) * w, 0);
+          } else {
+            const fromTop =
+              (b === LAST_FRAME || b === PENULTIMATE_FRAME) &&
+              !SLIDE_INCOMING_FROM_BOTTOM.has(b);
+            ctx.translate(0, fromTop ? -(1 - t) * h : (1 - t) * h);
+          }
+          drawCover(ctx, imgB, w, h, "bottom");
+          ctx.restore();
+        }
+      }
+      ctx.restore();
     },
     []
   );
 
   const scheduleDraw = useCallback(
-    (progress: number) => {
-      const frame = progressToFileNumber(progress, frameOrder);
+    (rawScrollProgress: number) => {
+      const scene = scrollProgressToScene(rawScrollProgress, sequenceCompleteAt);
+      const eased = heroBlendEase(scene);
+      const par =
+        mergeLastFramesInOneScroll >= 2
+          ? tryParallelTailDraw(eased, frameOrder, mergeLastFramesInOneScroll)
+          : { parallel: false as const };
+      const { fromIndex } = progressToBlend(eased, frameOrder, BLEND_OPTS);
+      const framesNeeded =
+        par.parallel
+          ? [...frameOrder]
+          : [...frameOrder.slice(0, fromIndex + 2)];
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = null;
-        void ensureImage(frame).then(() => drawFrame(frame));
+        void Promise.all(framesNeeded.map((fn) => ensureImage(fn))).then(() =>
+          drawProgress(scene)
+        );
       });
     },
-    [drawFrame, ensureImage]
+    [drawProgress, ensureImage]
   );
 
   useMotionValueEvent(scrollYProgress, "change", (latest) => {
@@ -166,19 +267,37 @@ export function InteriorScrollCanvas() {
     setSequenceStep(Number(e.target.value));
   };
 
-  const reducedFileNumber = frameOrder[sequenceStep - 1]!;
+  const reducedProgress =
+    SEQUENCE_LEN <= 1 ? 0 : (sequenceStep - 1) / (SEQUENCE_LEN - 1);
+  const reducedEased = heroBlendEase(reducedProgress);
+  const { a: reducedA, b: reducedB, t: reducedT } = progressToBlend(
+    reducedEased,
+    frameOrder,
+    BLEND_OPTS
+  );
 
   useEffect(() => {
     if (!reduced) return;
-    void ensureImage(reducedFileNumber).then(() => drawFrame(reducedFileNumber));
-  }, [reduced, reducedFileNumber, ensureImage, drawFrame]);
+    const eased = heroBlendEase(reducedProgress);
+    const par =
+      mergeLastFramesInOneScroll >= 2
+        ? tryParallelTailDraw(eased, frameOrder, mergeLastFramesInOneScroll)
+        : { parallel: false as const };
+    const { fromIndex } = progressToBlend(eased, frameOrder, BLEND_OPTS);
+    const frames = [
+      ...(par.parallel ? frameOrder : frameOrder.slice(0, fromIndex + 2)),
+    ];
+    void Promise.all(frames.map((fn) => ensureImage(fn))).then(() =>
+      drawProgress(reducedProgress)
+    );
+  }, [reduced, reducedProgress, ensureImage, drawProgress]);
 
   useEffect(() => {
     if (!reduced) return;
-    const ro = new ResizeObserver(() => drawFrame(reducedFileNumber));
+    const ro = new ResizeObserver(() => drawProgress(reducedProgress));
     if (containerRef.current) ro.observe(containerRef.current);
     return () => ro.disconnect();
-  }, [reduced, reducedFileNumber, drawFrame]);
+  }, [reduced, reducedProgress, drawProgress]);
 
   if (reduced) {
     return (
@@ -207,7 +326,8 @@ export function InteriorScrollCanvas() {
             className="w-full accent-[var(--color-accent)]"
           />
           <p className="mt-2 text-center font-body text-xs text-warm-light/70">
-            Step {sequenceStep} / {SEQUENCE_LEN} (image {reducedFileNumber})
+            Step {sequenceStep} / {SEQUENCE_LEN} — image {reducedB} from bottom (
+            {Math.round(reducedT * 100)}%)
           </p>
         </div>
       </div>
@@ -222,7 +342,7 @@ export function InteriorScrollCanvas() {
         aria-hidden
       />
       <span className="sr-only" aria-live="polite">
-        Scroll-driven interior sequence from empty room to finished space.
+        Second image slides up from below as you scroll.
         {preloadStatus === "loading" && " Loading frames."}
         {preloadStatus === "ready" && " All frames ready."}
       </span>
