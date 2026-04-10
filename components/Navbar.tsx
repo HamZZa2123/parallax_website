@@ -1,5 +1,6 @@
 "use client";
 
+import { withBasePath } from "@/lib/basePath";
 import { useScrollProgress } from "@/lib/scroll-context";
 import { motion, useTransform } from "framer-motion";
 import Link from "next/link";
@@ -33,7 +34,13 @@ export function Navbar() {
           className="flex items-center gap-2 opacity-90 transition hover:opacity-100"
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="" width={28} height={28} className="h-7 w-7" />
+          <img
+            src={withBasePath("/logo.svg")}
+            alt=""
+            width={28}
+            height={28}
+            className="h-7 w-7"
+          />
           <span className="sr-only">Home</span>
         </Link>
         <nav className="flex gap-8 font-body text-sm tracking-wide text-warm-light/85">
